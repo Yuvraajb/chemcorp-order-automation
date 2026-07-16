@@ -1,127 +1,156 @@
-import { getDb } from "./db";
+import { query } from "./db";
 import type { Brand, Product, Order, OrderItem } from "./types";
+
+// created_at is returned as an IST wall-clock string ("YYYY-MM-DDTHH:MM:SS")
+// so display code never depends on the server's timezone.
+const CREATED_AT_IST = `to_char(o.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD"T"HH24:MI:SS')`;
 
 const PRODUCT_SELECT = `
   SELECT p.*, b.name AS brand_name, b.slug AS brand_slug, b.color AS brand_color
   FROM products p JOIN brands b ON b.id = p.brand_id
 `;
 
-export function getBrands(): Brand[] {
-  return getDb()
-    .prepare(
-      `SELECT b.*, COUNT(p.id) AS product_count
-       FROM brands b LEFT JOIN products p ON p.brand_id = b.id
-       GROUP BY b.id ORDER BY b.name`
-    )
-    .all() as Brand[];
+const ORDER_SELECT = `
+  SELECT o.id, o.order_number, o.company_name, o.contact_name, o.email, o.phone,
+         o.gstin, o.notes, o.subtotal, o.tax, o.total, o.status,
+         ${CREATED_AT_IST} AS created_at
+  FROM orders o
+`;
+
+export async function getBrands(): Promise<Brand[]> {
+  return query<Brand>(
+    `SELECT b.*, COUNT(p.id)::int AS product_count
+     FROM brands b LEFT JOIN products p ON p.brand_id = b.id
+     GROUP BY b.id ORDER BY b.name`
+  );
 }
 
-export function getBrandBySlug(slug: string): Brand | undefined {
-  return getDb().prepare("SELECT * FROM brands WHERE slug = ?").get(slug) as Brand | undefined;
+export async function getBrandBySlug(slug: string): Promise<Brand | undefined> {
+  const rows = await query<Brand>("SELECT * FROM brands WHERE slug = $1", [slug]);
+  return rows[0];
 }
 
-export function getProducts(filters: {
+export async function getProducts(filters: {
   search?: string;
   brand?: string;
   category?: string;
   page?: number;
   perPage?: number;
-}): { products: Product[]; total: number } {
+}): Promise<{ products: Product[]; total: number }> {
   const conditions: string[] = [];
-  const params: (string | number)[] = [];
+  const params: unknown[] = [];
 
   if (filters.search) {
-    conditions.push("(p.name LIKE ? OR p.cas_number LIKE ? OR b.name LIKE ?)");
-    const q = `%${filters.search}%`;
-    params.push(q, q, q);
+    params.push(`%${filters.search}%`);
+    const n = params.length;
+    conditions.push(`(p.name ILIKE $${n} OR p.cas_number ILIKE $${n} OR b.name ILIKE $${n})`);
   }
   if (filters.brand) {
-    conditions.push("b.slug = ?");
     params.push(filters.brand);
+    conditions.push(`b.slug = $${params.length}`);
   }
   if (filters.category) {
-    conditions.push("p.category = ?");
     params.push(filters.category);
+    conditions.push(`p.category = $${params.length}`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const db = getDb();
 
-  const countRow = db
-    .prepare(`SELECT COUNT(*) AS c FROM products p JOIN brands b ON b.id = p.brand_id ${where}`)
-    .get(...params) as { c: number };
+  const countRows = await query<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM products p JOIN brands b ON b.id = p.brand_id ${where}`,
+    params
+  );
 
   const perPage = filters.perPage ?? 24;
   const page = Math.max(1, filters.page ?? 1);
 
-  const products = db
-    .prepare(`${PRODUCT_SELECT} ${where} ORDER BY p.name, p.grade LIMIT ? OFFSET ?`)
-    .all(...params, perPage, (page - 1) * perPage) as Product[];
+  const products = await query<Product>(
+    `${PRODUCT_SELECT} ${where} ORDER BY p.name, p.grade LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, perPage, (page - 1) * perPage]
+  );
 
-  return { products, total: countRow.c };
+  return { products, total: countRows[0].c };
 }
 
-export function getProductBySlug(slug: string): Product | undefined {
-  return getDb().prepare(`${PRODUCT_SELECT} WHERE p.slug = ?`).get(slug) as Product | undefined;
+export async function getProductBySlug(slug: string): Promise<Product | undefined> {
+  const rows = await query<Product>(`${PRODUCT_SELECT} WHERE p.slug = $1`, [slug]);
+  return rows[0];
 }
 
-export function getProductsByBrand(brandId: number): Product[] {
-  return getDb()
-    .prepare(`${PRODUCT_SELECT} WHERE p.brand_id = ? ORDER BY p.name, p.grade`)
-    .all(brandId) as Product[];
+export async function getProductsByBrand(brandId: number): Promise<Product[]> {
+  return query<Product>(`${PRODUCT_SELECT} WHERE p.brand_id = $1 ORDER BY p.name, p.grade`, [
+    brandId,
+  ]);
 }
 
-export function getRelatedProducts(product: Product, limit = 4): Product[] {
-  return getDb()
-    .prepare(`${PRODUCT_SELECT} WHERE p.brand_id = ? AND p.id != ? ORDER BY RANDOM() LIMIT ?`)
-    .all(product.brand_id, product.id, limit) as Product[];
+export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
+  return query<Product>(
+    `${PRODUCT_SELECT} WHERE p.brand_id = $1 AND p.id != $2 ORDER BY RANDOM() LIMIT $3`,
+    [product.brand_id, product.id, limit]
+  );
 }
 
-export function getFeaturedProducts(limit = 8): Product[] {
-  return getDb()
-    .prepare(`${PRODUCT_SELECT} WHERE p.in_stock = 1 AND p.id % 29 = 3 LIMIT ?`)
-    .all(limit) as Product[];
+export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
+  return query<Product>(`${PRODUCT_SELECT} WHERE p.in_stock = 1 AND p.id % 29 = 3 LIMIT $1`, [
+    limit,
+  ]);
 }
 
-export function getCategories(): string[] {
-  const rows = getDb()
-    .prepare("SELECT DISTINCT category FROM products ORDER BY category")
-    .all() as { category: string }[];
+export async function getCategories(): Promise<string[]> {
+  const rows = await query<{ category: string }>(
+    "SELECT DISTINCT category FROM products ORDER BY category"
+  );
   return rows.map((r) => r.category);
 }
 
-export function getOrderByNumber(orderNumber: string): Order | undefined {
-  const order = getDb()
-    .prepare("SELECT * FROM orders WHERE order_number = ?")
-    .get(orderNumber) as Order | undefined;
-  if (order) {
-    order.items = getDb()
-      .prepare("SELECT * FROM order_items WHERE order_id = ?")
-      .all(order.id) as OrderItem[];
+async function attachItems(orders: Order[]): Promise<Order[]> {
+  if (orders.length === 0) return orders;
+  const ids = orders.map((o) => o.id);
+  const items = await query<OrderItem>(
+    "SELECT * FROM order_items WHERE order_id = ANY($1::int[]) ORDER BY id",
+    [ids]
+  );
+  const byOrder = new Map<number, OrderItem[]>();
+  for (const item of items) {
+    const list = byOrder.get(item.order_id) ?? [];
+    list.push(item);
+    byOrder.set(item.order_id, list);
   }
-  return order;
-}
-
-export function getOrders(limit = 100): Order[] {
-  const orders = getDb()
-    .prepare("SELECT * FROM orders ORDER BY created_at DESC, id DESC LIMIT ?")
-    .all(limit) as Order[];
-  const itemsStmt = getDb().prepare("SELECT * FROM order_items WHERE order_id = ?");
   for (const order of orders) {
-    order.items = itemsStmt.all(order.id) as OrderItem[];
+    order.items = byOrder.get(order.id) ?? [];
   }
   return orders;
 }
 
-export function getOrdersForDate(date: string): Order[] {
-  const orders = getDb()
-    .prepare("SELECT * FROM orders WHERE date(created_at) = date(?) ORDER BY created_at")
-    .all(date) as Order[];
-  const itemsStmt = getDb().prepare("SELECT * FROM order_items WHERE order_id = ?");
-  for (const order of orders) {
-    order.items = itemsStmt.all(order.id) as OrderItem[];
-  }
-  return orders;
+export async function getOrderByNumber(orderNumber: string): Promise<Order | undefined> {
+  const orders = await query<Order>(`${ORDER_SELECT} WHERE o.order_number = $1`, [orderNumber]);
+  await attachItems(orders);
+  return orders[0];
+}
+
+export async function getOrders(limit = 100): Promise<Order[]> {
+  const orders = await query<Order>(
+    `${ORDER_SELECT} ORDER BY o.created_at DESC, o.id DESC LIMIT $1`,
+    [limit]
+  );
+  return attachItems(orders);
+}
+
+/** Orders whose IST calendar date matches the given YYYY-MM-DD date. */
+export async function getOrdersForDate(date: string): Promise<Order[]> {
+  const orders = await query<Order>(
+    `${ORDER_SELECT} WHERE (o.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date ORDER BY o.created_at`,
+    [date]
+  );
+  return attachItems(orders);
+}
+
+export async function countOrdersForDate(date: string): Promise<number> {
+  const rows = await query<{ c: number }>(
+    `SELECT COUNT(*)::int AS c FROM orders o WHERE (o.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date`,
+    [date]
+  );
+  return rows[0].c;
 }
 
 export interface OrderStats {
@@ -131,15 +160,56 @@ export interface OrderStats {
   allTotal: number;
 }
 
-export function getOrderStats(): OrderStats {
-  const db = getDb();
-  const today = db
-    .prepare(
-      "SELECT COUNT(*) AS c, COALESCE(SUM(total), 0) AS t FROM orders WHERE date(created_at) = date('now', 'localtime')"
-    )
-    .get() as { c: number; t: number };
-  const all = db
-    .prepare("SELECT COUNT(*) AS c, COALESCE(SUM(total), 0) AS t FROM orders")
-    .get() as { c: number; t: number };
-  return { todayCount: today.c, todayTotal: today.t, allCount: all.c, allTotal: all.t };
+export async function getOrderStats(today: string): Promise<OrderStats> {
+  const todayRows = await query<{ c: number; t: number }>(
+    `SELECT COUNT(*)::int AS c, COALESCE(SUM(total), 0)::int AS t
+     FROM orders o WHERE (o.created_at AT TIME ZONE 'Asia/Kolkata')::date = $1::date`,
+    [today]
+  );
+  const allRows = await query<{ c: number; t: number }>(
+    "SELECT COUNT(*)::int AS c, COALESCE(SUM(total), 0)::int AS t FROM orders"
+  );
+  return {
+    todayCount: todayRows[0].c,
+    todayTotal: todayRows[0].t,
+    allCount: allRows[0].c,
+    allTotal: allRows[0].t,
+  };
+}
+
+export interface ReportLogRow {
+  id: number;
+  report_date: string;
+  recipient: string;
+  order_count: number;
+  total_value: number;
+  delivery: string;
+}
+
+export async function getRecentReportLogs(limit = 5): Promise<ReportLogRow[]> {
+  return query<ReportLogRow>(
+    "SELECT id, report_date, recipient, order_count, total_value, delivery FROM report_log ORDER BY id DESC LIMIT $1",
+    [limit]
+  );
+}
+
+export async function hasReportForDate(date: string): Promise<boolean> {
+  const rows = await query<{ one: number }>(
+    "SELECT 1 AS one FROM report_log WHERE report_date = $1 LIMIT 1",
+    [date]
+  );
+  return rows.length > 0;
+}
+
+export async function logReport(entry: {
+  date: string;
+  recipient: string;
+  orderCount: number;
+  totalValue: number;
+  delivery: string;
+}): Promise<void> {
+  await query(
+    "INSERT INTO report_log (report_date, recipient, order_count, total_value, delivery) VALUES ($1, $2, $3, $4, $5)",
+    [entry.date, entry.recipient, entry.orderCount, entry.totalValue, entry.delivery]
+  );
 }

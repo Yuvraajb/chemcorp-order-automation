@@ -28,9 +28,9 @@ const VALUE_PROPS = [
   },
 ];
 
-export default function HomePage() {
-  const brands = getBrands();
-  const featured = getFeaturedProducts(8);
+export default async function HomePage() {
+  const brands = await getBrands();
+  const featured = await getFeaturedProducts(8);
   const totalProducts = brands.reduce((sum, b) => sum + (b.product_count ?? 0), 0);
 
   return (

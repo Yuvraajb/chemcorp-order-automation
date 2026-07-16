@@ -22,7 +22,10 @@ export async function sendEmail(opts: {
   html: string;
 }): Promise<SendResult> {
   if (!isSmtpConfigured()) {
-    const dir = path.join(process.cwd(), "reports");
+    // Vercel's filesystem is read-only outside /tmp.
+    const dir = process.env.VERCEL
+      ? path.join("/tmp", "reports")
+      : path.join(process.cwd(), "reports");
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(
       dir,

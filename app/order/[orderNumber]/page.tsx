@@ -12,7 +12,7 @@ export default async function OrderConfirmationPage({
   params: Promise<{ orderNumber: string }>;
 }) {
   const { orderNumber } = await params;
-  const order = getOrderByNumber(orderNumber);
+  const order = await getOrderByNumber(orderNumber);
   if (!order) notFound();
 
   return (

@@ -26,15 +26,15 @@ export default async function ProductsPage({
   const { q, brand, category, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const { products, total } = getProducts({
+  const { products, total } = await getProducts({
     search: q,
     brand,
     category,
     page,
     perPage: PER_PAGE,
   });
-  const brands = getBrands();
-  const categories = getCategories();
+  const brands = await getBrands();
+  const categories = await getCategories();
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
 
   return (

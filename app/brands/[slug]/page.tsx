@@ -12,10 +12,10 @@ export default async function BrandPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const brand = getBrandBySlug(slug);
+  const brand = await getBrandBySlug(slug);
   if (!brand) notFound();
 
-  const products = getProductsByBrand(brand.id);
+  const products = await getProductsByBrand(brand.id);
 
   return (
     <>

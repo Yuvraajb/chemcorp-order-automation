@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Our Brands" };
 
-export default function BrandsPage() {
-  const brands = getBrands();
+export default async function BrandsPage() {
+  const brands = await getBrands();
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6">

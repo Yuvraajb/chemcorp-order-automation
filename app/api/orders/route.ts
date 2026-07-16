@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getPool } from "@/lib/db";
 import { getOrders } from "@/lib/queries";
-import type { Product } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +9,17 @@ const GST_RATE = 0.18;
 interface IncomingItem {
   productId: number;
   quantity: number;
+}
+
+interface ResolvedProduct {
+  id: number;
+  name: string;
+  grade: string;
+  packaging: string;
+  unit: string;
+  price: number;
+  min_order_qty: number;
+  brand_name: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -44,14 +54,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
 
-  const db = getDb();
-  const productStmt = db.prepare(
-    `SELECT p.*, b.name AS brand_name FROM products p JOIN brands b ON b.id = p.brand_id WHERE p.id = ?`
-  );
+  const pool = await getPool();
 
-  const resolved: { product: Product & { brand_name: string }; quantity: number }[] = [];
+  const resolved: { product: ResolvedProduct; quantity: number }[] = [];
   for (const item of items) {
-    const product = productStmt.get(item.productId) as (Product & { brand_name: string }) | undefined;
+    const { rows } = await pool.query(
+      `SELECT p.id, p.name, p.grade, p.packaging, p.unit, p.price, p.min_order_qty, b.name AS brand_name
+       FROM products p JOIN brands b ON b.id = p.brand_id WHERE p.id = $1`,
+      [item.productId]
+    );
+    const product = rows[0] as ResolvedProduct | undefined;
     if (!product) {
       return NextResponse.json({ error: `Product ${item.productId} not found.` }, { status: 400 });
     }
@@ -72,56 +84,67 @@ export async function POST(req: NextRequest) {
   const tax = Math.round(subtotal * GST_RATE);
   const total = subtotal + tax;
 
-  const seq = (db.prepare("SELECT COUNT(*) AS c FROM orders").get() as { c: number }).c + 1;
-  const now = new Date();
-  const orderNumber = `CC-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
-    now.getDate()
-  ).padStart(2, "0")}-${String(seq).padStart(4, "0")}`;
+  const client = await pool.connect();
+  let orderNumber: string;
+  try {
+    await client.query("BEGIN");
 
-  const insertOrder = db.prepare(
-    `INSERT INTO orders (order_number, company_name, contact_name, email, phone, gstin, notes, subtotal, tax, total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  const insertItem = db.prepare(
-    `INSERT INTO order_items (order_id, product_id, product_name, brand_name, grade, packaging, unit, unit_price, quantity, line_total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+    const seqResult = await client.query("SELECT nextval('order_number_seq')::int AS seq");
+    const seq: number = seqResult.rows[0].seq;
+    const now = new Date();
+    const istDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" })
+      .format(now)
+      .replace(/-/g, "");
+    orderNumber = `CC-${istDate}-${String(seq).padStart(4, "0")}`;
 
-  const create = db.transaction(() => {
-    const result = insertOrder.run(
-      orderNumber,
-      companyName.trim(),
-      contactName.trim(),
-      email.trim(),
-      phone.trim(),
-      gstin?.trim() || null,
-      notes?.trim() || null,
-      subtotal,
-      tax,
-      total
+    const orderResult = await client.query(
+      `INSERT INTO orders (order_number, company_name, contact_name, email, phone, gstin, notes, subtotal, tax, total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      [
+        orderNumber,
+        companyName.trim(),
+        contactName.trim(),
+        email.trim(),
+        phone.trim(),
+        gstin?.trim() || null,
+        notes?.trim() || null,
+        subtotal,
+        tax,
+        total,
+      ]
     );
-    const orderId = Number(result.lastInsertRowid);
+    const orderId: number = orderResult.rows[0].id;
+
     for (const { product, quantity } of resolved) {
-      insertItem.run(
-        orderId,
-        product.id,
-        product.name,
-        product.brand_name,
-        product.grade,
-        product.packaging,
-        product.unit,
-        product.price,
-        quantity,
-        product.price * quantity
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, product_name, brand_name, grade, packaging, unit, unit_price, quantity, line_total)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          orderId,
+          product.id,
+          product.name,
+          product.brand_name,
+          product.grade,
+          product.packaging,
+          product.unit,
+          product.price,
+          quantity,
+          product.price * quantity,
+        ]
       );
     }
-  });
 
-  create();
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 
   return NextResponse.json({ orderNumber, subtotal, tax, total }, { status: 201 });
 }
 
 export async function GET() {
-  return NextResponse.json({ orders: getOrders() });
+  return NextResponse.json({ orders: await getOrders() });
 }

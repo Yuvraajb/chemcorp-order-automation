@@ -1,6 +1,6 @@
 import { Inbox, IndianRupee, Package, Mail } from "lucide-react";
-import { getOrders, getOrderStats } from "@/lib/queries";
-import { getSetting, getDb } from "@/lib/db";
+import { getOrders, getOrderStats, getRecentReportLogs } from "@/lib/queries";
+import { getSetting, istToday } from "@/lib/db";
 import { formatINR, formatDate } from "@/lib/format";
 import { ReportSettingsForm, SendReportButton } from "@/components/admin-controls";
 
@@ -8,24 +8,12 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Admin Dashboard" };
 
-interface ReportLogRow {
-  id: number;
-  report_date: string;
-  recipient: string;
-  order_count: number;
-  total_value: number;
-  delivery: string;
-  sent_at: string;
-}
-
-export default function AdminPage() {
-  const stats = getOrderStats();
-  const orders = getOrders(50);
-  const reportEmail = getSetting("report_email") ?? "";
-  const reportHour = getSetting("report_hour") ?? "18";
-  const reportLog = getDb()
-    .prepare("SELECT * FROM report_log ORDER BY id DESC LIMIT 5")
-    .all() as ReportLogRow[];
+export default async function AdminPage() {
+  const stats = await getOrderStats(istToday());
+  const orders = await getOrders(50);
+  const reportEmail = (await getSetting("report_email")) ?? "";
+  const reportHour = (await getSetting("report_hour")) ?? "18";
+  const reportLog = await getRecentReportLogs(5);
 
   const statCards = [
     { icon: Inbox, label: "Orders today", value: String(stats.todayCount) },

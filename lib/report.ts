@@ -1,5 +1,5 @@
-import { getDb, getSetting } from "./db";
-import { getOrdersForDate } from "./queries";
+import { getSetting, istToday } from "./db";
+import { getOrdersForDate, countOrdersForDate, logReport } from "./queries";
 import { sendEmail, SendResult } from "./email";
 import type { Order } from "./types";
 
@@ -123,8 +123,12 @@ function buildOrderBlock(order: Order, index: number): string {
     </table>`;
 }
 
-export function buildReportHtml(date: string, orders: Order[], yesterdayCount: number): string {
-  const companyName = getSetting("company_name") || "ChemCorp Industries";
+export function buildReportHtml(
+  date: string,
+  orders: Order[],
+  yesterdayCount: number,
+  companyName: string
+): string {
   const revenue = orders.reduce((sum, o) => sum + o.total, 0);
   const { units, brands, topProducts } = rollup(orders);
 
@@ -262,26 +266,19 @@ export interface ReportRunResult extends SendResult {
   totalValue: number;
 }
 
-/** Builds and sends the daily report for the given date (defaults to today). */
+/** Builds and sends the daily report for the given IST date (defaults to today in IST). */
 export async function runDailyReport(date?: string): Promise<ReportRunResult> {
-  const db = getDb();
-  const targetDate =
-    date ||
-    (db.prepare("SELECT date('now', 'localtime') AS d").get() as { d: string }).d;
+  const targetDate = date || istToday();
+  const yesterday = new Date(new Date(`${targetDate}T12:00:00Z`).getTime() - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
 
-  const yesterday = (
-    db.prepare("SELECT date(?, '-1 day') AS d").get(targetDate) as { d: string }
-  ).d;
+  const orders = await getOrdersForDate(targetDate);
+  const yesterdayCount = await countOrdersForDate(yesterday);
 
-  const orders = getOrdersForDate(targetDate);
-  const yesterdayCount = (
-    db
-      .prepare("SELECT COUNT(*) AS c FROM orders WHERE date(created_at) = ?")
-      .get(yesterday) as { c: number }
-  ).c;
-
-  const recipient = getSetting("report_email") || "yuvraajbhatter10@gmail.com";
-  const html = buildReportHtml(targetDate, orders, yesterdayCount);
+  const recipient = (await getSetting("report_email")) || "yuvraajbhatter10@gmail.com";
+  const companyName = (await getSetting("company_name")) || "ChemCorp Industries";
+  const html = buildReportHtml(targetDate, orders, yesterdayCount, companyName);
   const revenue = orders.reduce((sum, o) => sum + o.total, 0);
 
   const displayDate = new Date(targetDate + "T12:00:00").toLocaleDateString("en-IN", {
@@ -296,9 +293,13 @@ export async function runDailyReport(date?: string): Promise<ReportRunResult> {
     html,
   });
 
-  db.prepare(
-    "INSERT INTO report_log (report_date, recipient, order_count, total_value, delivery) VALUES (?, ?, ?, ?, ?)"
-  ).run(targetDate, recipient, orders.length, revenue, result.detail);
+  await logReport({
+    date: targetDate,
+    recipient,
+    orderCount: orders.length,
+    totalValue: revenue,
+    delivery: result.detail,
+  });
 
   return {
     ...result,
