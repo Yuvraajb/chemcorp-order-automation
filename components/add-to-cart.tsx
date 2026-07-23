@@ -18,6 +18,9 @@ export function AddToCart({ product, compact = false }: { product: Product; comp
     );
   }
 
+  const packSizeKg = product.pack_size_kg;
+  const packCount = quantity / packSizeKg;
+
   const add = () => {
     addItem(
       {
@@ -28,6 +31,7 @@ export function AddToCart({ product, compact = false }: { product: Product; comp
         grade: product.grade,
         packaging: product.packaging,
         unit: product.unit,
+        packSizeKg,
         price: product.price,
         minOrderQty: product.min_order_qty,
       },
@@ -58,19 +62,18 @@ export function AddToCart({ product, compact = false }: { product: Product; comp
       <div className="flex items-center rounded-lg border border-border bg-surface">
         <button
           type="button"
-          onClick={() => setQuantity(Math.max(product.min_order_qty, quantity - 1))}
+          onClick={() => setQuantity(Math.max(product.min_order_qty, quantity - packSizeKg))}
           className="flex h-11 w-11 items-center justify-center rounded-l-lg text-primary transition-colors hover:bg-muted-bg"
           aria-label="Decrease quantity"
         >
           <Minus className="h-4 w-4" aria-hidden="true" />
         </button>
-        <span className="min-w-14 text-center text-sm font-bold text-primary" aria-live="polite">
-          {quantity} {product.unit}
-          {quantity > 1 ? "s" : ""}
+        <span className="min-w-16 text-center text-sm font-bold text-primary" aria-live="polite">
+          {quantity} kg
         </span>
         <button
           type="button"
-          onClick={() => setQuantity(quantity + 1)}
+          onClick={() => setQuantity(quantity + packSizeKg)}
           className="flex h-11 w-11 items-center justify-center rounded-r-lg text-primary transition-colors hover:bg-muted-bg"
           aria-label="Increase quantity"
         >
@@ -88,7 +91,8 @@ export function AddToCart({ product, compact = false }: { product: Product; comp
         {added ? "Added to cart" : "Add to cart"}
       </button>
       <p className="w-full text-xs text-muted">
-        Minimum order: {product.min_order_qty} {product.unit}s ({product.packaging})
+        = {packCount} {product.unit}
+        {packCount > 1 ? "s" : ""} of {product.packaging} · Minimum order: {product.min_order_qty} kg
       </p>
     </div>
   );

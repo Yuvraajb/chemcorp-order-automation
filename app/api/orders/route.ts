@@ -17,6 +17,7 @@ interface ResolvedProduct {
   grade: string;
   packaging: string;
   unit: string;
+  pack_size_kg: number;
   price: number;
   min_order_qty: number;
   brand_name: string;
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
   const resolved: { product: ResolvedProduct; quantity: number }[] = [];
   for (const item of items) {
     const { rows } = await pool.query(
-      `SELECT p.id, p.name, p.grade, p.packaging, p.unit, p.price, p.min_order_qty, b.name AS brand_name
+      `SELECT p.id, p.name, p.grade, p.packaging, p.unit, p.pack_size_kg, p.price, p.min_order_qty, b.name AS brand_name
        FROM products p JOIN brands b ON b.id = p.brand_id WHERE p.id = $1`,
       [item.productId]
     );
@@ -73,7 +74,15 @@ export async function POST(req: NextRequest) {
     }
     if (quantity < product.min_order_qty) {
       return NextResponse.json(
-        { error: `${product.name} has a minimum order of ${product.min_order_qty} ${product.unit}s.` },
+        { error: `${product.name} has a minimum order of ${product.min_order_qty} kg.` },
+        { status: 400 }
+      );
+    }
+    if (quantity % product.pack_size_kg !== 0) {
+      return NextResponse.json(
+        {
+          error: `${product.name} ships in ${product.pack_size_kg} kg packs (${product.packaging}) — quantity must be a multiple of ${product.pack_size_kg} kg.`,
+        },
         { status: 400 }
       );
     }

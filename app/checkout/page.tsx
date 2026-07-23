@@ -169,7 +169,7 @@ export default function CheckoutPage() {
                 <span className="text-primary">
                   {item.name}
                   <span className="block text-xs text-muted">
-                    {item.quantity} × {formatINR(item.price)} · {item.brandName}
+                    {item.quantity} kg × {formatINR(item.price)}/kg · {item.brandName}
                   </span>
                 </span>
                 <span className="shrink-0 font-semibold text-primary">

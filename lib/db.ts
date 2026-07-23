@@ -58,8 +58,9 @@ const SCHEMA = `
     grade TEXT NOT NULL,
     packaging TEXT NOT NULL,
     unit TEXT NOT NULL,
-    price INTEGER NOT NULL,
-    min_order_qty INTEGER NOT NULL DEFAULT 1,
+    pack_size_kg INTEGER NOT NULL DEFAULT 25,
+    price INTEGER NOT NULL, -- price per kg (₹)
+    min_order_qty INTEGER NOT NULL DEFAULT 1, -- minimum order quantity in kg
     in_stock INTEGER NOT NULL DEFAULT 1
   );
 
@@ -77,7 +78,7 @@ const SCHEMA = `
     subtotal INTEGER NOT NULL,
     tax INTEGER NOT NULL,
     total INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'received',
+    status TEXT NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   );
 
@@ -127,14 +128,16 @@ async function seed(client: PoolClient) {
       for (const variant of GRADE_VARIANTS) {
         const key = `${brand.slug}-${chemical}-${variant.grade}`;
         const h = hash(key);
-        const basePrice = 800 + (h % 42) * 250; // ₹800 – ₹11,050 per pack
-        const price = Math.round(basePrice * variant.priceFactor);
+        const basePackPrice = 800 + (h % 42) * 250; // ₹800 – ₹11,050 per pack
+        const packPrice = Math.round(basePackPrice * variant.priceFactor);
+        const pricePerKg = Math.max(1, Math.round(packPrice / variant.packSizeKg));
+        const minOrderQtyKg = variant.minOrderQty * variant.packSizeKg;
         const cas = `${1000 + (h % 9000)}-${10 + (h % 90)}-${h % 10}`;
         const inStock = h % 11 === 0 ? 0 : 1; // ~9% marked out of stock
 
         await client.query(
-          `INSERT INTO products (brand_id, name, slug, cas_number, category, grade, packaging, unit, price, min_order_qty, in_stock)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          `INSERT INTO products (brand_id, name, slug, cas_number, category, grade, packaging, unit, pack_size_kg, price, min_order_qty, in_stock)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
           [
             brandId,
             chemical,
@@ -144,8 +147,9 @@ async function seed(client: PoolClient) {
             variant.grade,
             variant.packaging,
             variant.unit,
-            price,
-            variant.minOrderQty,
+            variant.packSizeKg,
+            pricePerKg,
+            minOrderQtyKg,
             inStock,
           ]
         );
@@ -162,12 +166,73 @@ async function seed(client: PoolClient) {
   );
 }
 
+/**
+ * Existing deployments were seeded with price-per-pack and min_order_qty in
+ * packs (drums/bags). Converting to price-per-kg / qty-in-kg is a one-time,
+ * non-idempotent transformation (dividing price twice would corrupt it), so
+ * it's gated behind a schema_version flag rather than run on every boot.
+ */
+async function migrate(client: PoolClient) {
+  await client.query(
+    `ALTER TABLE products ADD COLUMN IF NOT EXISTS pack_size_kg INTEGER NOT NULL DEFAULT 25`
+  );
+  await client.query(
+    `UPDATE products SET pack_size_kg = (regexp_match(packaging, '(\\d+)'))[1]::int
+     WHERE packaging ~ '\\d+'`
+  );
+  await client.query(`ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'pending'`);
+
+  const { rows } = await client.query(
+    "SELECT value FROM settings WHERE key = 'schema_version'"
+  );
+  let version = rows[0]?.value ?? "1";
+
+  async function setVersion(v: string) {
+    version = v;
+    await client.query(
+      `INSERT INTO settings (key, value) VALUES ('schema_version', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [v]
+    );
+  }
+
+  if (version === "1") {
+    await client.query(
+      `UPDATE products
+       SET price = GREATEST(1, ROUND(price::numeric / NULLIF(pack_size_kg, 0))),
+           min_order_qty = min_order_qty * pack_size_kg`
+    );
+    await client.query(`UPDATE orders SET status = 'pending' WHERE status = 'received'`);
+    await setVersion("2");
+  }
+
+  if (version === "2") {
+    // order_items snapshot the price/qty at order time, so rows placed before
+    // this migration still hold the old per-pack price and pack-count
+    // quantity. Convert them using the pack size parsed from their own
+    // captured `packaging` string (independent of the current products row)
+    // so historical orders display correctly.
+    await client.query(
+      `UPDATE order_items oi
+       SET quantity = oi.quantity * sub.pack_kg,
+           unit_price = GREATEST(1, ROUND(oi.unit_price::numeric / sub.pack_kg))
+       FROM (
+         SELECT id, (regexp_match(packaging, '(\\d+)'))[1]::int AS pack_kg
+         FROM order_items
+       ) sub
+       WHERE oi.id = sub.id AND sub.pack_kg IS NOT NULL AND sub.pack_kg > 0`
+    );
+    await setVersion("3");
+  }
+}
+
 async function init(p: Pool) {
   const client = await p.connect();
   try {
     // Advisory lock: serverless can boot many instances at once — only one seeds.
     await client.query("SELECT pg_advisory_lock(727272)");
     await client.query(SCHEMA);
+    await migrate(client);
     const { rows } = await client.query("SELECT COUNT(*)::int AS c FROM brands");
     if (rows[0].c === 0) {
       await seed(client);

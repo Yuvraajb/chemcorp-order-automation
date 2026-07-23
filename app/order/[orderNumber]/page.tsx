@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, ArrowRight } from "lucide-react";
-import { getOrderByNumber } from "@/lib/queries";
+import { CheckCircle2, ArrowRight, Clock } from "lucide-react";
+import { getOrderByNumber, getPendingOrdersForEmail } from "@/lib/queries";
 import { formatINR, formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,8 @@ export default async function OrderConfirmationPage({
   const { orderNumber } = await params;
   const order = await getOrderByNumber(orderNumber);
   if (!order) notFound();
+
+  const pendingOrders = await getPendingOrdersForEmail(order.email, order.id);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
@@ -55,7 +57,7 @@ export default async function OrderConfirmationPage({
               <div className="text-right">
                 <p className="font-semibold text-primary">{formatINR(item.line_total)}</p>
                 <p className="text-xs text-muted">
-                  {item.quantity} × {formatINR(item.unit_price)}
+                  {item.quantity} kg × {formatINR(item.unit_price)}/kg
                 </p>
               </div>
             </li>
@@ -77,6 +79,39 @@ export default async function OrderConfirmationPage({
           </div>
         </dl>
       </div>
+
+      {pendingOrders.length > 0 && (
+        <div className="mt-8 overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="flex items-center gap-2 border-b border-border bg-muted-bg px-6 py-4">
+            <Clock className="h-4 w-4 text-muted" aria-hidden="true" />
+            <h2 className="font-heading text-sm font-bold uppercase tracking-wider text-primary">
+              Your other pending orders ({pendingOrders.length})
+            </h2>
+          </div>
+          <ul className="divide-y divide-border px-6">
+            {pendingOrders.map((pending) => (
+              <li key={pending.id} className="flex items-center justify-between gap-4 py-4 text-sm">
+                <div>
+                  <Link
+                    href={`/order/${pending.order_number}`}
+                    className="font-semibold text-accent transition-colors hover:text-accent-dark"
+                  >
+                    {pending.order_number}
+                  </Link>
+                  <p className="text-xs text-muted">
+                    Placed {formatDate(pending.created_at)} ·{" "}
+                    {pending.items?.reduce((sum, i) => sum + i.quantity, 0) ?? 0} kg
+                  </p>
+                </div>
+                <p className="font-semibold text-primary">{formatINR(pending.total)}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-border bg-muted-bg px-6 py-3 text-xs text-muted">
+            Still awaiting dispatch from our order desk.
+          </p>
+        </div>
+      )}
 
       <div className="mt-8 text-center">
         <Link

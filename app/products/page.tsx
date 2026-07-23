@@ -41,7 +41,7 @@ export default async function ProductsPage({
     <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
       <h1 className="font-heading text-4xl font-bold text-primary">Product catalog</h1>
       <p className="mt-2 text-lg text-muted">
-        {total} products across {brands.length} brands. Prices are per pack, exclusive of GST.
+        {total} products across {brands.length} brands. Prices are per kg, exclusive of GST.
       </p>
 
       {/* Filters */}

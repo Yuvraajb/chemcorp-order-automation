@@ -54,23 +54,28 @@ export default function CartPage() {
                   {item.brandName} · {item.grade} · {item.packaging}
                 </p>
                 <p className="mt-1 text-sm font-bold text-primary">
-                  {formatINR(item.price)} <span className="font-normal text-muted">/ {item.unit}</span>
+                  {formatINR(item.price)} <span className="font-normal text-muted">/ kg</span>
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center rounded-lg border border-border">
                   <button
                     type="button"
-                    onClick={() => updateQuantity(item.productId, Math.max(item.minOrderQty, item.quantity - 1))}
+                    onClick={() =>
+                      updateQuantity(
+                        item.productId,
+                        Math.max(item.minOrderQty, item.quantity - item.packSizeKg)
+                      )
+                    }
                     className="flex h-10 w-10 items-center justify-center rounded-l-lg text-primary transition-colors hover:bg-muted-bg"
                     aria-label={`Decrease quantity of ${item.name}`}
                   >
                     <Minus className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <span className="min-w-10 text-center text-sm font-bold text-primary">{item.quantity}</span>
+                  <span className="min-w-14 text-center text-sm font-bold text-primary">{item.quantity} kg</span>
                   <button
                     type="button"
-                    onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                    onClick={() => updateQuantity(item.productId, item.quantity + item.packSizeKg)}
                     className="flex h-10 w-10 items-center justify-center rounded-r-lg text-primary transition-colors hover:bg-muted-bg"
                     aria-label={`Increase quantity of ${item.name}`}
                   >

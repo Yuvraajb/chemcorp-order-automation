@@ -19,8 +19,9 @@ export interface Product {
   grade: string;
   packaging: string;
   unit: string;
-  price: number;
-  min_order_qty: number;
+  pack_size_kg: number;
+  price: number; // ₹ per kg
+  min_order_qty: number; // kg
   in_stock: number;
   brand_name?: string;
   brand_slug?: string;
@@ -35,9 +36,10 @@ export interface CartItem {
   grade: string;
   packaging: string;
   unit: string;
-  price: number;
-  minOrderQty: number;
-  quantity: number;
+  packSizeKg: number;
+  price: number; // ₹ per kg
+  minOrderQty: number; // kg
+  quantity: number; // kg
 }
 
 export interface Order {

@@ -1,8 +1,13 @@
-import { Inbox, IndianRupee, Package, Mail } from "lucide-react";
-import { getOrders, getOrderStats, getRecentReportLogs } from "@/lib/queries";
+import { Inbox, IndianRupee, Package, Mail, Clock, AlertTriangle } from "lucide-react";
+import {
+  getOrders,
+  getOrderStats,
+  getRecentReportLogs,
+  getPendingDemandByProduct,
+} from "@/lib/queries";
 import { getSetting, istToday } from "@/lib/db";
 import { formatINR, formatDate } from "@/lib/format";
-import { ReportSettingsForm, SendReportButton } from "@/components/admin-controls";
+import { ReportSettingsForm, SendReportButton, MarkFulfilledButton } from "@/components/admin-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +19,13 @@ export default async function AdminPage() {
   const reportEmail = (await getSetting("report_email")) ?? "";
   const reportHour = (await getSetting("report_hour")) ?? "18";
   const reportLog = await getRecentReportLogs(5);
+  const pendingDemand = await getPendingDemandByProduct(20);
 
   const statCards = [
     { icon: Inbox, label: "Orders today", value: String(stats.todayCount) },
     { icon: IndianRupee, label: "Revenue today", value: formatINR(stats.todayTotal) },
     { icon: Package, label: "Orders all-time", value: String(stats.allCount) },
+    { icon: Clock, label: "Pending orders", value: String(stats.pendingCount) },
     { icon: Mail, label: "Report goes to", value: reportEmail, small: true },
   ];
 
@@ -29,7 +36,7 @@ export default async function AdminPage() {
         Live order desk — incoming orders, daily report automation and settings.
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((card) => (
           <div key={card.label} className="rounded-xl border border-border bg-surface p-5">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-light text-accent">
@@ -62,6 +69,7 @@ export default async function AdminPage() {
                     <th scope="col" className="px-4 py-3 font-bold">Company</th>
                     <th scope="col" className="px-4 py-3 font-bold">Items</th>
                     <th scope="col" className="px-4 py-3 text-right font-bold">Total</th>
+                    <th scope="col" className="px-4 py-3 font-bold">Status</th>
                     <th scope="col" className="px-6 py-3 text-right font-bold">Placed</th>
                   </tr>
                 </thead>
@@ -74,11 +82,25 @@ export default async function AdminPage() {
                         <span className="block text-xs text-muted">{order.email}</span>
                       </td>
                       <td className="px-4 py-3.5 text-muted">
-                        {order.items?.reduce((sum, i) => sum + i.quantity, 0)} units ·{" "}
+                        {order.items?.reduce((sum, i) => sum + i.quantity, 0)} kg ·{" "}
                         {order.items?.length} lines
                       </td>
                       <td className="px-4 py-3.5 text-right font-bold text-primary">
                         {formatINR(order.total)}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        {order.status === "fulfilled" ? (
+                          <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-success">
+                            Fulfilled
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                              Pending
+                            </span>
+                            <MarkFulfilledButton orderId={order.id} />
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-3.5 text-right text-xs text-muted">
                         {formatDate(order.created_at)}
@@ -129,6 +151,62 @@ export default async function AdminPage() {
           </section>
         </div>
       </div>
+
+      {/* Product-wise pending demand — for gauging stock position */}
+      <section className="mt-8 overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="border-b border-border px-6 py-4">
+          <h2 className="font-heading text-lg font-bold text-primary">Pending demand by product</h2>
+          <p className="mt-1 text-sm text-muted">
+            Open kg still on pending orders, per product — use this to check stock position before
+            it runs out.
+          </p>
+        </div>
+        {pendingDemand.length === 0 ? (
+          <p className="px-6 py-14 text-center text-sm text-muted">
+            No pending orders right now — nothing waiting on stock.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted-bg text-xs uppercase tracking-wider text-muted">
+                  <th scope="col" className="px-6 py-3 font-bold">Product</th>
+                  <th scope="col" className="px-4 py-3 font-bold">Brand</th>
+                  <th scope="col" className="px-4 py-3 text-right font-bold">Pending qty</th>
+                  <th scope="col" className="px-4 py-3 text-right font-bold">Orders</th>
+                  <th scope="col" className="px-6 py-3 font-bold">Stock position</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {pendingDemand.map((row) => (
+                  <tr key={row.product_id} className="transition-colors hover:bg-muted-bg/60">
+                    <td className="px-6 py-3.5">
+                      <span className="font-semibold text-primary">{row.product_name}</span>
+                      <span className="block text-xs text-muted">{row.packaging}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-muted">{row.brand_name}</td>
+                    <td className="px-4 py-3.5 text-right font-bold text-primary">
+                      {row.pending_qty_kg.toLocaleString("en-IN")} kg
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-muted">{row.pending_orders}</td>
+                    <td className="px-6 py-3.5">
+                      {row.in_stock ? (
+                        <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-success">
+                          In stock
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-destructive">
+                          <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Out of stock — restock needed
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

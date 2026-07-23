@@ -128,6 +128,24 @@ export async function getOrderByNumber(orderNumber: string): Promise<Order | und
   return orders[0];
 }
 
+/** A customer's other still-pending orders, most recent first — shown on the order confirmation page. */
+export async function getPendingOrdersForEmail(
+  email: string,
+  excludeOrderId: number,
+  limit = 10
+): Promise<Order[]> {
+  const orders = await query<Order>(
+    `${ORDER_SELECT} WHERE o.email = $1 AND o.status = 'pending' AND o.id != $2
+     ORDER BY o.created_at DESC LIMIT $3`,
+    [email, excludeOrderId, limit]
+  );
+  return attachItems(orders);
+}
+
+export async function updateOrderStatus(id: number, status: string): Promise<void> {
+  await query("UPDATE orders SET status = $1 WHERE id = $2", [status, id]);
+}
+
 export async function getOrders(limit = 100): Promise<Order[]> {
   const orders = await query<Order>(
     `${ORDER_SELECT} ORDER BY o.created_at DESC, o.id DESC LIMIT $1`,
@@ -158,6 +176,8 @@ export interface OrderStats {
   todayTotal: number;
   allCount: number;
   allTotal: number;
+  pendingCount: number;
+  pendingTotal: number;
 }
 
 export async function getOrderStats(today: string): Promise<OrderStats> {
@@ -169,12 +189,45 @@ export async function getOrderStats(today: string): Promise<OrderStats> {
   const allRows = await query<{ c: number; t: number }>(
     "SELECT COUNT(*)::int AS c, COALESCE(SUM(total), 0)::int AS t FROM orders"
   );
+  const pendingRows = await query<{ c: number; t: number }>(
+    "SELECT COUNT(*)::int AS c, COALESCE(SUM(total), 0)::int AS t FROM orders WHERE status = 'pending'"
+  );
   return {
     todayCount: todayRows[0].c,
     todayTotal: todayRows[0].t,
     allCount: allRows[0].c,
     allTotal: allRows[0].t,
+    pendingCount: pendingRows[0].c,
+    pendingTotal: pendingRows[0].t,
   };
+}
+
+export interface PendingDemandRow {
+  product_id: number;
+  product_name: string;
+  brand_name: string;
+  packaging: string;
+  pending_qty_kg: number;
+  pending_orders: number;
+  in_stock: number;
+}
+
+/** Product-wise open demand (kg still on pending orders) — used to gauge stock position. */
+export async function getPendingDemandByProduct(limit = 50): Promise<PendingDemandRow[]> {
+  return query<PendingDemandRow>(
+    `SELECT oi.product_id, oi.product_name, oi.brand_name, oi.packaging,
+            SUM(oi.quantity)::int AS pending_qty_kg,
+            COUNT(DISTINCT oi.order_id)::int AS pending_orders,
+            COALESCE(p.in_stock, 1) AS in_stock
+     FROM order_items oi
+     JOIN orders o ON o.id = oi.order_id
+     LEFT JOIN products p ON p.id = oi.product_id
+     WHERE o.status = 'pending'
+     GROUP BY oi.product_id, oi.product_name, oi.brand_name, oi.packaging, p.in_stock
+     ORDER BY pending_qty_kg DESC
+     LIMIT $1`,
+    [limit]
+  );
 }
 
 export interface ReportLogRow {

@@ -17,10 +17,11 @@ export const GRADE_VARIANTS: {
   priceFactor: number;
   packaging: string;
   unit: string;
+  packSizeKg: number;
   minOrderQty: number;
 }[] = [
-  { grade: "Technical Grade", priceFactor: 1.0, packaging: "50 kg drum", unit: "drum", minOrderQty: 5 },
-  { grade: "Industrial Grade", priceFactor: 1.35, packaging: "25 kg bag", unit: "bag", minOrderQty: 10 },
+  { grade: "Technical Grade", priceFactor: 1.0, packaging: "50 kg drum", unit: "drum", packSizeKg: 50, minOrderQty: 5 },
+  { grade: "Industrial Grade", priceFactor: 1.35, packaging: "25 kg bag", unit: "bag", packSizeKg: 25, minOrderQty: 10 },
 ];
 
 export const BRAND_SEEDS: BrandSeed[] = [

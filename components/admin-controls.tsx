@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Send, Save, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Loader2, Send, Save, CheckCircle2, AlertTriangle, PackageCheck } from "lucide-react";
 
 export function ReportSettingsForm({
   initialEmail,
@@ -105,6 +105,43 @@ export function ReportSettingsForm({
   );
 }
 
+export function MarkFulfilledButton({ orderId }: { orderId: number }) {
+  const router = useRouter();
+  const [updating, setUpdating] = useState(false);
+
+  async function markFulfilled() {
+    setUpdating(true);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ status: "fulfilled" }),
+      });
+      if (!res.ok) throw new Error("Could not update order status.");
+      router.refresh();
+    } catch {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={markFulfilled}
+      disabled={updating}
+      className="flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold text-primary transition-colors hover:border-success hover:text-success disabled:opacity-60"
+    >
+      {updating ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+      ) : (
+        <PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      Mark fulfilled
+    </button>
+  );
+}
+
 export function SendReportButton() {
   const router = useRouter();
   const [sending, setSending] = useState(false);
@@ -114,7 +151,7 @@ export function SendReportButton() {
     setSending(true);
     setResult(null);
     try {
-      const res = await fetch("/api/report/send", { method: "POST" });
+      const res = await fetch("/api/report/send", { method: "POST", credentials: "include" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Report failed.");
       setResult({

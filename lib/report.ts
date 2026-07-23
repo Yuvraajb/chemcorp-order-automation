@@ -80,7 +80,7 @@ function buildOrderBlock(order: Order, index: number): string {
           <span style="color:${SLATE};">· ${esc(item.grade)} · ${esc(item.packaging)}</span><br>
           <span style="font-size:11px;color:${BLUE};font-weight:600;">${esc(item.brand_name)}</span>
         </td>
-        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};white-space:nowrap;">${item.quantity} × ${inr(item.unit_price)}</td>
+        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};white-space:nowrap;">${item.quantity} kg × ${inr(item.unit_price)}/kg</td>
         <td align="right" style="padding:9px 0;border-bottom:1px solid #F1F5F9;font-size:13px;color:${NAVY};font-weight:700;white-space:nowrap;">${inr(item.line_total)}</td>
       </tr>`
     )
@@ -151,14 +151,14 @@ export function buildReportHtml(
   const summaryLine =
     orders.length === 0
       ? `No orders came in today. ${trend}`
-      : `You received <strong>${orders.length} order${orders.length === 1 ? "" : "s"}</strong> today worth <strong>${inr(revenue)}</strong> across <strong>${units} units</strong>. ${trend}`;
+      : `You received <strong>${orders.length} order${orders.length === 1 ? "" : "s"}</strong> today worth <strong>${inr(revenue)}</strong> across <strong>${units.toLocaleString("en-IN")} kg</strong>. ${trend}`;
 
   const brandRows = brands
     .map(
       (b, i) => `
       <tr>
         <td style="padding:9px 0;border-bottom:1px solid #F1F5F9;font-size:13px;color:${NAVY};font-weight:${i === 0 ? 700 : 400};">${i + 1}. ${esc(b.brand)}</td>
-        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};">${b.units} units</td>
+        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};">${b.units.toLocaleString("en-IN")} kg</td>
         <td align="right" style="padding:9px 0;border-bottom:1px solid #F1F5F9;font-size:13px;color:${NAVY};font-weight:700;">${inr(b.value)}</td>
       </tr>`
     )
@@ -169,7 +169,7 @@ export function buildReportHtml(
       (p, i) => `
       <tr>
         <td style="padding:9px 0;border-bottom:1px solid #F1F5F9;font-size:13px;color:${NAVY};">${i + 1}. ${esc(p.name)}<br><span style="font-size:11px;color:${BLUE};font-weight:600;">${esc(p.brand)}</span></td>
-        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};">${p.units} units</td>
+        <td align="center" style="padding:9px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:${SLATE};">${p.units.toLocaleString("en-IN")} kg</td>
         <td align="right" style="padding:9px 0;border-bottom:1px solid #F1F5F9;font-size:13px;color:${NAVY};font-weight:700;">${inr(p.value)}</td>
       </tr>`
     )
@@ -217,7 +217,7 @@ export function buildReportHtml(
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
             ${statCard("Orders", String(orders.length), "placed today")}
             ${statCard("Revenue", inr(revenue), "incl. 18% GST")}
-            ${statCard("Units", String(units), "across all brands")}
+            ${statCard("Volume", `${units.toLocaleString("en-IN")} kg`, "across all brands")}
           </tr></table>
         </td></tr>
 

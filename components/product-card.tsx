@@ -33,8 +33,11 @@ export function ProductCard({ product }: { product: Product }) {
         </p>
         <div className="mt-auto flex items-end justify-between gap-2 pt-3">
           <div>
-            <p className="text-lg font-bold text-primary">{formatINR(product.price)}</p>
-            <p className="text-[11px] text-muted">per {product.unit} · MOQ {product.min_order_qty}</p>
+            <p className="text-lg font-bold text-primary">
+              {formatINR(product.price)}
+              <span className="text-xs font-normal text-muted">/kg</span>
+            </p>
+            <p className="text-[11px] text-muted">MOQ {product.min_order_qty} kg</p>
           </div>
           <AddToCart product={product} compact />
         </div>

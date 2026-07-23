@@ -60,7 +60,7 @@ export default async function ProductPage({
           <p className="mt-6 font-heading text-4xl font-bold text-primary">
             {formatINR(product.price)}
             <span className="ml-2 text-base font-normal text-muted">
-              per {product.unit} ({product.packaging}) · excl. GST
+              per kg · packed in {product.packaging} · excl. GST
             </span>
           </p>
 
@@ -73,7 +73,7 @@ export default async function ProductPage({
               ["CAS Number", product.cas_number],
               ["Grade", product.grade],
               ["Packaging", product.packaging],
-              ["Minimum order", `${product.min_order_qty} ${product.unit}s`],
+              ["Minimum order", `${product.min_order_qty} kg`],
               ["Category", product.category],
               ["Availability", product.in_stock ? "In stock" : "Out of stock"],
             ].map(([label, value]) => (

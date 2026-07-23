@@ -4,9 +4,23 @@ import { runDailyReport } from "@/lib/report";
 export const dynamic = "force-dynamic";
 
 function authorized(req: NextRequest): boolean {
+  const header = req.headers.get("authorization");
+
+  // Admin "Send now" button: browser re-sends the /admin Basic-auth credentials
+  // on this same-origin fetch. Accept those so the button works without exposing
+  // any server secret to the client.
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (adminPassword && header?.startsWith("Basic ")) {
+    try {
+      const [user, pass] = atob(header.slice(6)).split(":");
+      if (user === "admin" && pass === adminPassword) return true;
+    } catch {
+      // malformed header — fall through to the secret check
+    }
+  }
+
   const secret = process.env.CRON_SECRET;
   if (!secret) return true; // no secret configured — open (local/dev use)
-  const header = req.headers.get("authorization");
   return header === `Bearer ${secret}` || req.nextUrl.searchParams.get("secret") === secret;
 }
 
