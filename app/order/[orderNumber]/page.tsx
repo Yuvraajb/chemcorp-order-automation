@@ -24,8 +24,9 @@ export default async function OrderConfirmationPage({
         <h1 className="mt-5 font-heading text-4xl font-bold text-primary">Order received</h1>
         <p className="mt-3 text-lg text-muted">
           Thank you, {order.contact_name}. Your order{" "}
-          <strong className="text-primary">{order.order_number}</strong> is with our desk — a
-          confirmation is on its way to <strong className="text-primary">{order.email}</strong>.
+          <strong className="text-primary">{order.order_number}</strong> is with our desk — save
+          this page for your records. Our team confirms pricing and dispatch within one business
+          day.
         </p>
       </div>
 

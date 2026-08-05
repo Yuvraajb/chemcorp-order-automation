@@ -20,7 +20,7 @@ interface Field {
 const FIELDS: Field[] = [
   { name: "companyName", label: "Company name", type: "text", required: true, placeholder: "Acme Manufacturing Pvt Ltd", autoComplete: "organization" },
   { name: "contactName", label: "Contact person", type: "text", required: true, placeholder: "Full name", autoComplete: "name" },
-  { name: "email", label: "Business email", type: "email", required: true, placeholder: "purchase@company.com", autoComplete: "email", helper: "Order confirmation will be sent here." },
+  { name: "email", label: "Business email", type: "email", required: true, placeholder: "purchase@company.com", autoComplete: "email", helper: "Used to find your other pending orders and by our order desk to reach you." },
   { name: "phone", label: "Phone", type: "tel", required: true, placeholder: "+91 98765 43210", autoComplete: "tel" },
   { name: "gstin", label: "GSTIN", type: "text", required: false, placeholder: "22AAAAA0000A1Z5", helper: "Optional — needed for GST invoice credit." },
 ];

@@ -24,13 +24,13 @@ function authorized(req: NextRequest): boolean {
   return header === `Bearer ${secret}` || req.nextUrl.searchParams.get("secret") === secret;
 }
 
-async function handle(req: NextRequest) {
+async function handle(req: NextRequest, force: boolean) {
   if (!authorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const date = req.nextUrl.searchParams.get("date") || undefined;
   try {
-    const result = await runDailyReport(date);
+    const result = await runDailyReport(date, { force });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(
@@ -40,11 +40,14 @@ async function handle(req: NextRequest) {
   }
 }
 
-// POST for the admin "Send now" button; GET for cron services (Vercel Cron, cron-job.org).
+// POST for the admin "Send now" button — always sends, even if today's report
+// already went out. GET for cron services (Vercel Cron, cron-job.org, the
+// standalone scheduler) — these fire automatically and may overlap with the
+// Render embedded scheduler, so they respect the once-per-day dedupe.
 export async function POST(req: NextRequest) {
-  return handle(req);
+  return handle(req, true);
 }
 
 export async function GET(req: NextRequest) {
-  return handle(req);
+  return handle(req, false);
 }

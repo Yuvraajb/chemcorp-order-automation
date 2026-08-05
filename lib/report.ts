@@ -1,5 +1,5 @@
 import { getSetting, istToday } from "./db";
-import { getOrdersForDate, countOrdersForDate, logReport } from "./queries";
+import { getOrdersForDate, countOrdersForDate, hasReportForDate, logReport } from "./queries";
 import { sendEmail, SendResult } from "./email";
 import type { Order } from "./types";
 
@@ -266,8 +266,17 @@ export interface ReportRunResult extends SendResult {
   totalValue: number;
 }
 
-/** Builds and sends the daily report for the given IST date (defaults to today in IST). */
-export async function runDailyReport(date?: string): Promise<ReportRunResult> {
+/**
+ * Builds and sends the daily report for the given IST date (defaults to today in IST).
+ *
+ * Both the Render embedded scheduler and Vercel Cron hit this independently against
+ * the same shared database, so by default a report already logged for the date is
+ * not re-sent (`force: true` — used by the Admin "Send now" button — bypasses this).
+ */
+export async function runDailyReport(
+  date?: string,
+  opts?: { force?: boolean }
+): Promise<ReportRunResult> {
   const targetDate = date || istToday();
   const yesterday = new Date(new Date(`${targetDate}T12:00:00Z`).getTime() - 86_400_000)
     .toISOString()
@@ -275,11 +284,22 @@ export async function runDailyReport(date?: string): Promise<ReportRunResult> {
 
   const orders = await getOrdersForDate(targetDate);
   const yesterdayCount = await countOrdersForDate(yesterday);
-
+  const revenue = orders.reduce((sum, o) => sum + o.total, 0);
   const recipient = (await getSetting("report_email")) || "yuvraajbhatter10@gmail.com";
+
+  if (!opts?.force && (await hasReportForDate(targetDate))) {
+    return {
+      delivered: false,
+      detail: `Report for ${targetDate} was already sent earlier — skipping duplicate (this endpoint is hit by both the Render scheduler and Vercel Cron). Use Admin → "Send today's report now" to force a resend.`,
+      date: targetDate,
+      recipient,
+      orderCount: orders.length,
+      totalValue: revenue,
+    };
+  }
+
   const companyName = (await getSetting("company_name")) || "ChemCorp Industries";
   const html = buildReportHtml(targetDate, orders, yesterdayCount, companyName);
-  const revenue = orders.reduce((sum, o) => sum + o.total, 0);
 
   const displayDate = new Date(targetDate + "T12:00:00").toLocaleDateString("en-IN", {
     day: "numeric",

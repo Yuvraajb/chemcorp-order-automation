@@ -12,8 +12,24 @@ import cron from "node-cron";
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
 const CRON_SECRET = process.env.CRON_SECRET || "";
+const IST = "Asia/Kolkata";
 
 let lastSentDate = null;
+
+// The rest of the app treats "day" as an IST calendar day (lib/db.ts istToday/
+// istHour) — this scheduler has to match, since it may run on a host in any
+// timezone (that's the whole point of it existing alongside the embedded one).
+function istToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date());
+}
+
+function istHour() {
+  return Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: IST, hour: "numeric", hour12: false }).format(
+      new Date()
+    )
+  );
+}
 
 async function getConfiguredHour() {
   try {
@@ -29,7 +45,10 @@ async function getConfiguredHour() {
 async function sendReport() {
   const url = new URL("/api/report/send", BASE_URL);
   if (CRON_SECRET) url.searchParams.set("secret", CRON_SECRET);
-  const res = await fetch(url, { method: "POST" });
+  // GET (not POST): this scheduler fires automatically like a cron job, so the
+  // endpoint's once-per-day dedupe should apply — it may run alongside the
+  // Render embedded scheduler or Vercel Cron against the same database.
+  const res = await fetch(url, { method: "GET" });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   console.log(
@@ -42,12 +61,11 @@ async function sendReport() {
 console.log(`[scheduler] Watching ${BASE_URL} — daily report fires at the hour set in Admin.`);
 
 cron.schedule("* * * * *", async () => {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  const today = istToday();
   if (lastSentDate === today) return;
 
   const hour = await getConfiguredHour();
-  if (now.getHours() < hour) return;
+  if (istHour() < hour) return;
 
   try {
     await sendReport();
