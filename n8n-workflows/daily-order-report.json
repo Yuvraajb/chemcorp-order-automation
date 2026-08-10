@@ -1,0 +1,557 @@
+{
+  "id": "O9ehEx5DL4XwO19u",
+  "name": "Daily Order Report",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "connections": {
+    "Query Tally Stock": { "main": [[{ "node": "Parse Tally XML", "type": "main", "index": 0 }]] },
+    "Parse Tally XML": { "main": [[{ "node": "Compute Shortfall", "type": "main", "index": 0 }]] },
+    "Compute Shortfall": { "main": [[{ "node": "IF Enough Stock", "type": "main", "index": 0 }]] },
+    "IF Enough Stock": {
+      "main": [
+        [{ "node": "Mark Fulfilled From Stock", "type": "main", "index": 0 }],
+        [{ "node": "Call BOM Explode", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mark Fulfilled From Stock": { "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]] },
+    "Deduct Stock In Tally": { "main": [[{ "node": "Log To Google Sheets", "type": "main", "index": 0 }]] },
+    "IF Shortfall Exists": {
+      "main": [
+        [{ "node": "Lookup BOM Rows", "type": "main", "index": 0 }],
+        [{ "node": "Nothing Needed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lookup BOM Rows": { "main": [[{ "node": "Calculate Raw Material Needs", "type": "main", "index": 0 }]] },
+    "Calculate Raw Material Needs": { "main": [[{ "node": "IF Is Self Produced", "type": "main", "index": 0 }]] },
+    "IF Is Self Produced": {
+      "main": [
+        [{ "node": "Call Self Recursively", "type": "main", "index": 0 }],
+        [{ "node": "Add To Purchase List", "type": "main", "index": 0 }]
+      ]
+    },
+    "Query Tally Stock1": { "main": [[{ "node": "Parse Tally XML1", "type": "main", "index": 0 }]] },
+    "Parse Tally XML1": { "main": [[{ "node": "Compute Shortfall1", "type": "main", "index": 0 }]] },
+    "Compute Shortfall1": { "main": [[{ "node": "IF Shortfall Exists", "type": "main", "index": 0 }]] },
+    "Schedule Trigger 3PM": { "main": [[{ "node": "Read Order Log", "type": "main", "index": 0 }]] },
+    "Read Order Log": { "main": [[{ "node": "Filter To Today", "type": "main", "index": 0 }]] },
+    "Filter To Today": { "main": [[{ "node": "Aggregate Report Data", "type": "main", "index": 0 }]] },
+    "Aggregate Report Data": {
+      "main": [
+        [
+          { "node": "Build Report Table Rows", "type": "main", "index": 0 },
+          { "node": "Build Email Summary", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Report Table Rows": { "main": [[{ "node": "Convert To Excel", "type": "main", "index": 0 }]] },
+    "Convert To Excel": { "main": [[{ "node": "Merge Excel And Summary", "type": "main", "index": 0 }]] },
+    "Merge Excel And Summary": { "main": [[{ "node": "Send Report Email", "type": "main", "index": 0 }]] },
+    "Call BOM Explode": { "main": [[{ "node": "Merge BOM Result With Order Context", "type": "main", "index": 0 }]] },
+    "Merge BOM Result With Order Context": { "main": [[{ "node": "Merge Results", "type": "main", "index": 1 }]] },
+    "Merge Recursion Branches": { "main": [[{ "node": "Aggregate All Results", "type": "main", "index": 0 }]] },
+    "Add To Purchase List": { "main": [[{ "node": "Merge Recursion Branches", "type": "main", "index": 1 }]] },
+    "Call Self Recursively": { "main": [[{ "node": "Tag Self-Produced And Merge", "type": "main", "index": 0 }]] },
+    "Tag Self-Produced And Merge": { "main": [[{ "node": "Merge Recursion Branches", "type": "main", "index": 0 }]] },
+    "Order Webhook (From Website)": { "main": [[{ "node": "Format Webhook Order", "type": "main", "index": 0 }]] },
+    "Format Webhook Order": { "main": [[{ "node": "Split Order Items", "type": "main", "index": 0 }]] },
+    "Split Order Items": { "main": [[{ "node": "Build Tally Stock Query XML", "type": "main", "index": 0 }]] },
+    "Build Tally Stock Query XML": { "main": [[{ "node": "Query Tally Stock", "type": "main", "index": 0 }]] },
+    "When Called by Order Processing": { "main": [[{ "node": "Build Tally Stock Query XML1", "type": "main", "index": 0 }]] },
+    "Build Tally Stock Query XML1": { "main": [[{ "node": "Query Tally Stock1", "type": "main", "index": 0 }]] },
+    "Merge Results": { "main": [[{ "node": "Build Stock Deduction XML", "type": "main", "index": 0 }]] },
+    "Build Stock Deduction XML": { "main": [[{ "node": "Deduct Stock In Tally", "type": "main", "index": 0 }]] },
+    "Build Email Summary": { "main": [[{ "node": "Merge Excel And Summary", "type": "main", "index": 1 }]] }
+  },
+  "nodes": [
+    {
+      "parameters": { "fieldToSplitOut": "items", "include": "allOtherFields", "options": {} },
+      "id": "55a0657d-0cc1-460a-a4ed-7fa4dbf4b7f2",
+      "name": "Split Order Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [-576, 880],
+      "notes": "Splits the 'items' array into one item per node execution, one per product in the order."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://REPLACE_TALLY_IP:9000",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/xml",
+        "body": "={{$json.tallyXmlQuery}}",
+        "options": {}
+      },
+      "id": "798ae263-b12b-4a17-9a3c-ad5da9b06ee7",
+      "name": "Query Tally Stock",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-128, 880],
+      "notes": "EDIT: Replace the URL with your Tally machine's IP and port (see design doc section 1)."
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "db832165-2389-45a4-b1bb-d86b2cf3c59a",
+      "name": "Parse Tally XML",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [96, 880],
+      "notes": "Converts Tally's XML response into a JSON object n8n can work with."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// The HTTP Request and XML nodes between 'Split Order Items' and here replace\n// item.json with their own output, so we read the original order fields back\n// from 'Split Order Items'. With 'Include Other Fields' on, that node nests the\n// split product/qty under an 'items' key rather than flattening to root - handle\n// both shapes defensively rather than assuming one. Works for both the IMAP and\n// webhook triggers, since both feed into 'Split Order Items'.\nconst raw = $('Split Order Items').item.json;\nconst original = raw.items && typeof raw.items === 'object' ? raw.items : raw;\n\n// This n8n instance's XML node outputs plain nested objects (confirmed via test\n// execution), not xml2js-style arrays - no [0] indexing needed.\nconst stockValueRaw = item.json?.ENVELOPE?.BODY?.DATA?.STOCKITEM?.CLOSINGBALANCE || \"0\";\n\nconst stockQty = parseFloat(String(stockValueRaw).trim()) || 0;\nconst qtyOrdered = original.qtyOrdered || 0;\nconst shortfall = qtyOrdered - stockQty;\n\nreturn {\n  json: {\n    orderNumber: raw.orderNumber || original.orderNumber,\n    product: original.product,\n    qtyOrdered,\n    stockQty,\n    shortfall: shortfall > 0 ? shortfall : 0,\n    fulfilledFromStock: shortfall > 0 ? qtyOrdered - shortfall : qtyOrdered\n  }\n};"
+      },
+      "id": "1f02752c-0165-42d6-941c-d8498e335093",
+      "name": "Compute Shortfall",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 880],
+      "notes": "EDIT: The path to CLOSINGBALANCE below is a starting guess - confirm the real path once you see Tally's actual XML response and adjust."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{$json.shortfall}}", "rightValue": 0, "operator": { "type": "number", "operation": "lte" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "58255cb7-685d-46eb-9e28-c1b4b88d9411",
+      "name": "IF Enough Stock",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [544, 880]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            { "name": "rawMaterialsToPurchase", "type": "arrayValue", "arrayValue": "=[]" },
+            { "name": "itemsToManufacture", "type": "arrayValue", "arrayValue": "=[]" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1928468-b56c-486a-af82-bf9d5cc3e594",
+      "name": "Mark Fulfilled From Stock",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [752, 752]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "O9ehEx5DL4XwO19u", "cachedResultName": "Daily Order Report" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "itemName": "={{$json.product}}", "qtyNeeded": "={{$json.shortfall}}", "orderNumber": "={{$json.orderNumber}}" }
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "e6f36ede-37d8-4416-b654-a677590ccd18",
+      "name": "Call BOM Explode",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [752, 992],
+      "notes": "Calls this same workflow's 'When Called by Order Processing' entry point. Pass itemName = product, qtyNeeded = shortfall."
+    },
+    {
+      "parameters": {},
+      "id": "fb244e6e-4c2e-48f5-98cf-48894b8e860f",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [976, 880],
+      "notes": "Append mode: combines the 'enough stock' branch and the 'BOM explode' branch back into one stream. Only one branch ever has data, since they come from an IF, so append just passes through whichever ran."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://REPLACE_TALLY_IP:9000",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/xml",
+        "body": "={{$json.tallyDeductionXml}}",
+        "options": {}
+      },
+      "id": "42c7b962-8d44-41c6-87fe-35f06fd93b2d",
+      "name": "Deduct Stock In Tally",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1424, 880],
+      "notes": "EDIT: Same Tally IP/port as the stock query node above."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "mode": "id", "value": "1KuX9PkXHi8SrOO-srXimhOzDUDbgtBHac3IobuppK5Q", "cachedResultName": "ChemCorp Order Automation" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Order Log" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{$now.toISO()}}",
+            "Order Number": "={{$json.orderNumber}}",
+            "Product": "={{$json.product}}",
+            "Qty Ordered": "={{$json.qtyOrdered}}",
+            "Stock Used": "={{$json.fulfilledFromStock}}",
+            "Raw Materials To Buy (JSON)": "={{JSON.stringify($json.rawMaterialsToPurchase)}}",
+            "Items To Manufacture (JSON)": "={{JSON.stringify($json.itemsToManufacture)}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "bfe5da83-27d8-4b74-ba89-9181028c89dc",
+      "name": "Log To Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1632, 880],
+      "notes": "Requires a Google Sheets OAuth2 credential attached in the n8n UI (not stored in this export)."
+    },
+    {
+      "parameters": { "workflowInputs": { "values": [{ "name": "itemName" }, { "name": "qtyNeeded" }, { "name": "orderNumber" }] } },
+      "id": "b3671c11-8659-4321-a444-43c79aa65b63",
+      "name": "When Called by Order Processing",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1472, 1376],
+      "notes": "Receives itemName, qtyNeeded, orderNumber from whichever workflow called this one (either Order Processing, or this same workflow calling itself)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{$json.shortfall}}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "612524bf-500e-4545-9db0-05c691f4aa1b",
+      "name": "IF Shortfall Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-368, 1376]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "47fa0912-66e1-4a05-b888-5d234311e327",
+      "name": "Nothing Needed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [-144, 1248],
+      "notes": "Enough stock exists for this item, nothing to purchase or manufacture."
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "id", "value": "1KuX9PkXHi8SrOO-srXimhOzDUDbgtBHac3IobuppK5Q", "cachedResultName": "ChemCorp Order Automation" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "BOM" },
+        "filtersUI": { "values": [{ "lookupColumn": "Product Name", "lookupValue": "={{$json.itemName}}" }] },
+        "options": {}
+      },
+      "id": "5572fb52-c162-41c9-b6c9-d6c00c9af97c",
+      "name": "Lookup BOM Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-144, 1488],
+      "notes": "Filters the BOM sheet tab for rows matching this item's name. Requires the Google Sheets credential attached in the n8n UI."
+    },
+    {
+      "parameters": {
+        "jsCode": "// The 'Compute Shortfall' node ran once, further back - grab its output\n// so we know how much shortfall we're multiplying against.\nconst shortfallData = $('Compute Shortfall1').first().json;\nconst shortfall = shortfallData.shortfall;\n\n// $input.all() here is every BOM row Google Sheets returned for this item.\nconst results = $input.all().map(row => ({\n  json: {\n    orderNumber: shortfallData.orderNumber,\n    rawMaterialName: row.json['Raw Material Name'],\n    qtyNeeded: parseFloat(row.json['Qty Per Unit']) * shortfall,\n    isSelfProduced: String(row.json['Is Self-Produced']).toUpperCase() === 'TRUE'\n  }\n}));\n\nreturn results;"
+      },
+      "id": "01c25068-f538-42cf-af72-a367aa5de1b4",
+      "name": "Calculate Raw Material Needs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 1488],
+      "notes": "Multiplies each BOM row's 'Qty Per Unit' by the shortfall to get the actual amount of each raw material needed for this item."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{$json.isSelfProduced}}", "rightValue": true, "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3064728a-c689-4659-afd8-311604ab8dcb",
+      "name": "IF Is Self Produced",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [288, 1488]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "O9ehEx5DL4XwO19u", "cachedResultName": "Daily Order Report" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "itemName": "={{$json.rawMaterialName}}", "qtyNeeded": "={{$json.qtyNeeded}}", "orderNumber": "={{$json.orderNumber}}" }
+        },
+        "mode": "each",
+        "options": {}
+      },
+      "id": "51809f64-cada-4117-bc04-fed598e98647",
+      "name": "Call Self Recursively",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [512, 1376],
+      "notes": "Calls this same workflow again, now treating the raw material as the new 'item'. This is what makes the BOM explosion go arbitrarily deep."
+    },
+    {
+      "parameters": {},
+      "id": "2fdb730c-b422-47b2-a9fc-c8dff4156ff0",
+      "name": "Merge Recursion Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [736, 1488],
+      "notes": "Append mode: combines results from the 'call self' branch and the 'add to purchase list' branch, only one of which has data per item."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://REPLACE_TALLY_IP:9000",
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/xml",
+        "body": "={{$json.tallyXmlQuery}}",
+        "options": {}
+      },
+      "id": "4048f853-f8fb-43e2-9a56-6f790b1e2aa7",
+      "name": "Query Tally Stock1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1024, 1376],
+      "notes": "EDIT: Replace with your Tally machine IP and port."
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "50e2ac87-097e-4f3d-82dc-1487f34d8ea2",
+      "name": "Parse Tally XML1",
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [-800, 1376]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// $('When Called by Order Processing').first().json gives us access to the\n// original inputs (itemName, qtyNeeded) from further back in this workflow,\n// since the XML/HTTP nodes in between don't carry them forward automatically.\nconst trigger = $('When Called by Order Processing').first().json;\n\n// This n8n instance's XML node outputs plain nested objects (confirmed via test\n// execution), not xml2js-style arrays - no [0] indexing needed.\nconst stockValueRaw = item.json?.ENVELOPE?.BODY?.DATA?.STOCKITEM?.CLOSINGBALANCE || \"0\";\nconst stockQty = parseFloat(String(stockValueRaw).trim()) || 0;\n\nconst qtyNeeded = trigger.qtyNeeded || 0;\nconst shortfall = qtyNeeded - stockQty;\n\nreturn {\n  json: {\n    itemName: trigger.itemName,\n    orderNumber: trigger.orderNumber,\n    qtyNeeded,\n    stockQty,\n    shortfall: shortfall > 0 ? shortfall : 0\n  }\n};"
+      },
+      "id": "50cc291d-faca-4fcc-a7b3-9112748bc61e",
+      "name": "Compute Shortfall1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-592, 1376],
+      "notes": "EDIT: confirm the CLOSINGBALANCE path against a real Tally response."
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 15 * * *" }] } },
+      "id": "3d339dc3-71af-40f3-b08a-0248a33c3756",
+      "name": "Schedule Trigger 3PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1728, 1968],
+      "notes": "EDIT: confirm your n8n instance's timezone setting matches your business's local time, or the 3pm trigger will fire at the wrong local time."
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "mode": "id", "value": "1KuX9PkXHi8SrOO-srXimhOzDUDbgtBHac3IobuppK5Q", "cachedResultName": "ChemCorp Order Automation" },
+        "sheetName": { "__rl": true, "mode": "name", "value": "Order Log" },
+        "options": {}
+      },
+      "id": "11156063-5a36-4035-b4ac-343708cea558",
+      "name": "Read Order Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-1504, 1968],
+      "notes": "Requires the Google Sheets credential attached in the n8n UI."
+    },
+    {
+      "parameters": {
+        "jsCode": "// $today gives today's date as an n8n Luxon DateTime, in the workflow's timezone.\n// We compare just the calendar date (not time) against each row's Timestamp.\nconst todayStr = $today.toFormat('yyyy-MM-dd');\n\nconst todaysRows = $input.all().filter(item => {\n  const rowDate = (item.json['Timestamp'] || '').slice(0, 10);\n  return rowDate === todayStr;\n});\n\n// The two JSON columns were stored as text via JSON.stringify when written,\n// so we parse them back into real arrays/objects here.\nconst parsed = todaysRows.map(item => ({\n  json: {\n    ...item.json,\n    rawMaterialsToPurchase: JSON.parse(item.json['Raw Materials To Buy (JSON)'] || '[]'),\n    itemsToManufacture: JSON.parse(item.json['Items To Manufacture (JSON)'] || '[]')\n  }\n}));\n\nreturn parsed;"
+      },
+      "id": "1cc548b2-fa0d-4359-9a14-3f15300324e9",
+      "name": "Filter To Today",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1280, 1968],
+      "notes": "Keeps only rows logged today, and parses the JSON columns back into real arrays."
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\n// Set() gives us each distinct order number, so counting its size tells us\n// how many separate orders came in today (since one order can span several rows).\nconst orderNumbers = new Set(rows.map(r => r['Order Number']));\n\n// Combine every row's raw-materials-to-buy list into one flat list.\nconst allRawMaterials = rows.flatMap(r => r.rawMaterialsToPurchase);\nconst allItemsToManufacture = rows.flatMap(r => r.itemsToManufacture);\n\nconst totalStockUsed = rows.reduce(\n  (sum, r) => sum + (parseFloat(r['Stock Used']) || 0),\n  0\n);\n\nreturn {\n  json: {\n    reportDate: $today.toFormat('yyyy-MM-dd'),\n    orderCount: orderNumbers.size,\n    orders: rows,\n    rawMaterialsToPurchase: allRawMaterials,\n    itemsToManufacture: allItemsToManufacture,\n    totalStockUsed\n  }\n};"
+      },
+      "id": "7d732514-29ff-4aef-acd7-ef7c922b80d4",
+      "name": "Aggregate Report Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1056, 1968],
+      "notes": "Rolls up all of today's rows into the summary numbers for the report: order count, total raw materials to buy, total items to manufacture, total stock used."
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $input.first().json;\n\nreturn report.orders.map(order => ({\n  json: {\n    'Order Number': order['Order Number'],\n    'Product': order['Product'],\n    'Qty Ordered': order['Qty Ordered'],\n    'Stock Used': order['Stock Used'],\n    'Raw Materials To Buy': JSON.stringify(order.rawMaterialsToPurchase),\n    'Items To Manufacture': JSON.stringify(order.itemsToManufacture)\n  }\n}));"
+      },
+      "id": "ddfe8d3d-451f-42f6-8879-3d0c380d674f",
+      "name": "Build Report Table Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-848, 1968],
+      "notes": "Flattens the report data into row objects that the Excel-conversion node can turn into a spreadsheet."
+    },
+    {
+      "parameters": { "operation": "xlsx", "options": { "fileName": "daily-order-report.xlsx" } },
+      "id": "b49f0567-5496-4a43-8e89-6d0dd7d45c55",
+      "name": "Convert To Excel",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [-624, 1968],
+      "notes": "EDIT: if your n8n version doesn't have 'Convert to File', use the older 'Spreadsheet File' node instead (n8n-nodes-base.spreadsheetFile) with the same xlsx settings."
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
+      "id": "c9d06327-2aa2-4c4c-b7c9-b1e629b00a73",
+      "name": "Merge Excel And Summary",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [-176, 1968],
+      "notes": "Combines the binary Excel file with the HTML summary text so the Send Email node has both."
+    },
+    {
+      "parameters": {
+        "fromEmail": "yuvraajbhatter10@gmail.com",
+        "toEmail": "yuvraajbhatter10@gmail.com",
+        "subject": "=Daily Order Report - {{$('Aggregate Report Data').first().json.reportDate}}",
+        "html": "={{$json.emailHtml}}",
+        "options": { "attachments": "data" }
+      },
+      "id": "b1b1c112-343a-411d-9b55-3847bea63e5f",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [48, 1968],
+      "webhookId": "0ffbd1cc-e33c-4419-9e11-c378f6cf36a4",
+      "notes": "Requires an SMTP credential attached in the n8n UI (not stored in this export)."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 'Call BOM Explode' only returns {rawMaterialsToPurchase, itemsToManufacture} from the\n// subworkflow - the per-order context from earlier (orderNumber, product, qtyOrdered,\n// stockQty, shortfall) doesn't survive the subworkflow call boundary, so we re-attach it\n// from 'Compute Shortfall' here.\nconst original = $('Compute Shortfall').item.json;\nreturn {\n  json: {\n    ...original,\n    rawMaterialsToPurchase: item.json.rawMaterialsToPurchase || [],\n    itemsToManufacture: item.json.itemsToManufacture || []\n  }\n};"
+      },
+      "id": "491f75c0-9b19-459f-9cd8-ad1fda6cfe1c",
+      "name": "Merge BOM Result With Order Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [864, 1072]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flattens every raw-material-loop iteration's {rawMaterialsToPurchase, itemsToManufacture}\n// into one combined pair of lists to hand back to whoever called this workflow.\nconst items = $input.all().map(i => i.json);\nconst rawMaterialsToPurchase = items.flatMap(i => i.rawMaterialsToPurchase || []);\nconst itemsToManufacture = items.flatMap(i => i.itemsToManufacture || []);\nreturn { json: { rawMaterialsToPurchase, itemsToManufacture } };"
+      },
+      "id": "437518a3-15a5-41f2-9e8d-9ae206a71713",
+      "name": "Aggregate All Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 1488]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// This raw material isn't self-produced, so it's a leaf node - goes straight on the\n// purchase list. Shaped to match what the self-produced branch returns, so both sides\n// of 'Merge Recursion Branches' are consistent before aggregation.\nreturn {\n  json: {\n    rawMaterialsToPurchase: [{ name: item.json.rawMaterialName, qty: item.json.qtyNeeded }],\n    itemsToManufacture: []\n  }\n};"
+      },
+      "id": "e97d0009-2894-4e17-8f9d-edef8980761f",
+      "name": "Add To Purchase List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [512, 1616]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Adds this self-produced raw material's own name/qty into itemsToManufacture before\n// merging with whatever the recursive call found further down the BOM tree - otherwise\n// the final report only ever shows leaf-level purchases, never the 'make N of X' rows.\nconst original = $('Calculate Raw Material Needs').item.json;\nconst nested = item.json;\nreturn {\n  json: {\n    rawMaterialsToPurchase: nested.rawMaterialsToPurchase || [],\n    itemsToManufacture: [\n      { name: original.rawMaterialName, qty: original.qtyNeeded },\n      ...(nested.itemsToManufacture || [])\n    ]\n  }\n};"
+      },
+      "id": "fc572add-a9a5-4582-b7a1-c5630ce1de39",
+      "name": "Tag Self-Produced And Merge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [624, 1376]
+    },
+    {
+      "parameters": { "httpMethod": "POST", "path": "chemcorp-order-created", "options": {} },
+      "id": "20fb9615-5829-4bed-b6a3-77b84c31ba18",
+      "name": "Order Webhook (From Website)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-784, 640],
+      "webhookId": "eccb6f64-7128-431a-8afe-f92a968f1b0e",
+      "notes": "Called by chemcorp's POST /api/orders right after an order is saved to Postgres. Expects { orderNumber, items: [{ product, qtyOrdered }, ...] }."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalizes the website's webhook payload into the same shape 'Extract Order Table'\n// produces from the email path, so both triggers feed 'Split Order Items' identically.\nconst body = item.json.body || item.json;\nreturn {\n  json: {\n    orderNumber: body.orderNumber,\n    items: (body.items || []).map(i => ({ product: i.product, qtyOrdered: Number(i.qtyOrdered) }))\n  }\n};"
+      },
+      "id": "4b645020-ae46-4ca9-8bcc-e528e22e77f8",
+      "name": "Format Webhook Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-576, 640]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Best-effort standard Tally HTTP XML 'Export Data' request for a single stock item's\n// closing balance. NOT yet verified against a real Tally instance - confirm the report\n// name, static variables, and response shape against a real test query before trusting\n// this in production (see Compute Shortfall's CLOSINGBALANCE path too).\nconst companyName = \"REPLACE_WITH_YOUR_TALLY_COMPANY_NAME\";\nconst itemName = item.json.product;\n\nconst tallyXmlQuery = `<ENVELOPE>\n <HEADER>\n  <TALLYREQUEST>Export Data</TALLYREQUEST>\n </HEADER>\n <BODY>\n  <EXPORTDATA>\n   <REQUESTDESC>\n    <REPORTNAME>Stock Summary</REPORTNAME>\n    <STATICVARIABLES>\n     <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>\n     <SVSTOCKITEM>${itemName}</SVSTOCKITEM>\n    </STATICVARIABLES>\n   </REQUESTDESC>\n  </EXPORTDATA>\n </BODY>\n</ENVELOPE>`;\n\nreturn { json: { ...item.json, tallyXmlQuery } };"
+      },
+      "id": "04b3fd26-c9f4-4dfb-95c2-f653faffb6e3",
+      "name": "Build Tally Stock Query XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-352, 880]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Same best-effort Tally query shape as 'Build Tally Stock Query XML', for the BOM\n// Explode subflow's item name field. NOT yet verified against a real Tally instance.\nconst companyName = \"REPLACE_WITH_YOUR_TALLY_COMPANY_NAME\";\nconst itemName = item.json.itemName;\n\nconst tallyXmlQuery = `<ENVELOPE>\n <HEADER>\n  <TALLYREQUEST>Export Data</TALLYREQUEST>\n </HEADER>\n <BODY>\n  <EXPORTDATA>\n   <REQUESTDESC>\n    <REPORTNAME>Stock Summary</REPORTNAME>\n    <STATICVARIABLES>\n     <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>\n     <SVSTOCKITEM>${itemName}</SVSTOCKITEM>\n    </STATICVARIABLES>\n   </REQUESTDESC>\n  </EXPORTDATA>\n </BODY>\n</ENVELOPE>`;\n\nreturn { json: { ...item.json, tallyXmlQuery } };"
+      },
+      "id": "778b9a0b-17c1-4c82-8bb7-78c93b4eabb6",
+      "name": "Build Tally Stock Query XML1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1248, 1376]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Best-effort standard Tally HTTP XML 'Import Data' Stock Journal voucher to deduct\n// fulfilled quantity. Ledger/voucher-type conventions vary a lot between Tally setups -\n// GODOWNNAME is a placeholder and this whole shape needs confirming against a real\n// Tally import before it's trusted to actually write data.\nconst companyName = \"REPLACE_WITH_YOUR_TALLY_COMPANY_NAME\";\nconst itemName = item.json.product;\nconst qty = item.json.fulfilledFromStock;\nconst date = new Date().toISOString().slice(0, 10).replace(/-/g, \"\");\n\nconst tallyDeductionXml = `<ENVELOPE>\n <HEADER>\n  <TALLYREQUEST>Import Data</TALLYREQUEST>\n </HEADER>\n <BODY>\n  <IMPORTDATA>\n   <REQUESTDESC>\n    <REPORTNAME>Vouchers</REPORTNAME>\n    <STATICVARIABLES>\n     <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>\n    </STATICVARIABLES>\n   </REQUESTDESC>\n   <REQUESTDATA>\n    <TALLYMESSAGE xmlns:UDF=\"TallyUDF\">\n     <VOUCHER VCHTYPE=\"Stock Journal\" ACTION=\"Create\">\n      <DATE>${date}</DATE>\n      <VOUCHERTYPENAME>Stock Journal</VOUCHERTYPENAME>\n      <NARRATION>Auto-deducted for order ${item.json.orderNumber}</NARRATION>\n      <ALLINVENTORYENTRIES.LIST>\n       <STOCKITEMNAME>${itemName}</STOCKITEMNAME>\n       <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>\n       <ACTUALQTY>-${qty}</ACTUALQTY>\n       <BILLEDQTY>-${qty}</BILLEDQTY>\n       <GODOWNNAME>REPLACE_WITH_YOUR_GODOWN_NAME</GODOWNNAME>\n      </ALLINVENTORYENTRIES.LIST>\n     </VOUCHER>\n    </TALLYMESSAGE>\n   </REQUESTDATA>\n  </IMPORTDATA>\n </BODY>\n</ENVELOPE>`;\n\nreturn { json: { ...item.json, tallyDeductionXml } };"
+      },
+      "id": "164008a9-fbad-4e93-b5cf-87c8977ad52f",
+      "name": "Build Stock Deduction XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 880]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Builds the HTML body text for the report email using the aggregated numbers from\n// 'Aggregate Report Data'.\nconst report = item.json;\n\nconst rows = (report.orders || []).map(o => `\n  <tr>\n    <td>${o['Order Number']}</td>\n    <td>${o['Product']}</td>\n    <td>${o['Qty Ordered']}</td>\n    <td>${o['Stock Used']}</td>\n  </tr>`).join('');\n\nconst purchaseItems = (report.rawMaterialsToPurchase || []).map(m => `<li>${m.name}: ${m.qty}</li>`).join('') || '<li>None</li>';\nconst manufactureItems = (report.itemsToManufacture || []).map(m => `<li>${m.name}: ${m.qty}</li>`).join('') || '<li>None</li>';\n\nconst emailHtml = `\n<h2>Daily Order Report - ${report.reportDate}</h2>\n<p><strong>${report.orderCount}</strong> orders today, <strong>${report.totalStockUsed}</strong> units fulfilled from stock.</p>\n<h3>Orders</h3>\n<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\">\n  <tr><th>Order #</th><th>Product</th><th>Qty Ordered</th><th>Stock Used</th></tr>\n  ${rows}\n</table>\n<h3>Raw Materials To Purchase</h3>\n<ul>${purchaseItems}</ul>\n<h3>Items To Manufacture</h3>\n<ul>${manufactureItems}</ul>\n`;\n\nreturn { json: { emailHtml } };"
+      },
+      "id": "4b97802c-9a70-41a2-a864-a50c053e774c",
+      "name": "Build Email Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 1840]
+    }
+  ]
+}

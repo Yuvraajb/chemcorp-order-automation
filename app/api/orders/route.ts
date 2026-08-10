@@ -6,6 +6,32 @@ export const dynamic = "force-dynamic";
 
 const GST_RATE = 0.18;
 
+/**
+ * Fires the new order at the n8n stock/BOM/purchasing pipeline. Best-effort: n8n being
+ * down or unconfigured must never block or fail checkout, so this never throws.
+ */
+function notifyN8nOrderCreated(
+  orderNumber: string,
+  resolved: { product: ResolvedProduct; quantity: number }[]
+) {
+  const webhookUrl = process.env.N8N_ORDER_WEBHOOK_URL;
+  if (!webhookUrl) return;
+
+  fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      orderNumber,
+      items: resolved.map(({ product, quantity }) => ({
+        product: product.name,
+        qtyOrdered: quantity,
+      })),
+    }),
+  }).catch((err) => {
+    console.error("[n8n] Failed to notify order webhook:", err);
+  });
+}
+
 interface IncomingItem {
   productId: number;
   quantity: number;
@@ -150,6 +176,8 @@ export async function POST(req: NextRequest) {
   } finally {
     client.release();
   }
+
+  notifyN8nOrderCreated(orderNumber, resolved);
 
   return NextResponse.json({ orderNumber, subtotal, tax, total }, { status: 201 });
 }
